@@ -372,7 +372,7 @@ class VirtualKittiModel(pl.LightningModule):
 
 class SequenceVkitiModel(pl.LightningModule):
 
-    def __init__(self, model_path, dataset_path):
+    def __init__(self, model_path, dataset_path, convolution_type):
         super().__init__()
 
         self.save_hyperparameters()
@@ -411,14 +411,24 @@ class SequenceVkitiModel(pl.LightningModule):
        
         self.confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=self.n_classes, normalize='true')
        
-        
-        self.conv_1d = torch.nn.Sequential(
-                          torch.nn.Conv2d(in_channels=2*self.n_classes, 
-                                       out_channels=self.n_classes, 
-                                       kernel_size=1, 
-                                       device=self.device),
-                         #torch.nn.Upsample(size=(256,256), mode = 'nearest') #Make the image size auto
-                        )
+        if convolution_type == '1D':
+            self.conv_1d = torch.nn.Sequential(
+                              torch.nn.Conv2d(in_channels=2*self.n_classes, 
+                                           out_channels=self.n_classes, 
+                                           kernel_size=1, 
+                                           device=self.device),
+                            )
+        elif convolution_type == '2D':
+            self.conv_1d = torch.nn.Sequential(
+                              torch.nn.Conv2d(in_channels=2*self.n_classes, 
+                                           out_channels=self.n_classes, 
+                                           kernel_size=3, 
+                                           device=self.device),
+                             torch.nn.Upsample(size=(256,256), mode = 'nearest') #Make the image size auto
+                            )
+        else:
+            raise 
+
 
     
     def forward(self, batch):
@@ -490,10 +500,7 @@ class SequenceVkitiModel(pl.LightningModule):
         self.val_0_iou.update(logits_mask0.argmax( dim=1, keepdim=True), batch["mask0"])
         self.val_1_iou.update(logits_mask1.argmax( dim=1, keepdim=True), batch["mask1"])
         self.OneD_fusion_iou.update(fused_mask.argmax( dim=1, keepdim=True), batch["mask1"])
-        self.log(f"iou/{stage}/0_iou", self.val_0_iou.compute(), prog_bar=False)
-        self.log(f"iou/{stage}/1_iou", self.val_1_iou.compute(), prog_bar=True)
-        self.log(f"iou/{stage}/OneD_fusion_iou", self.OneD_fusion_iou.compute(), prog_bar=True)
-        
+
         self.val_0_seg_metric.addBatch(logits_mask0.argmax( dim=1, keepdim=True), batch["mask0"])
         self.val_1_seg_metric.addBatch(logits_mask1.argmax( dim=1, keepdim=True), batch["mask1"])
         self.OneD_fusion_seg_metric.addBatch(fused_mask.argmax( dim=1, keepdim=True), batch["mask1"])
@@ -503,15 +510,18 @@ class SequenceVkitiModel(pl.LightningModule):
       
 
     def shared_epoch_end(self, outputs, stage):
-        self.log(f"iou/{stage}/0_iou", self.val_0_iou.compute(), prog_bar=False)
-        self.log(f"iou/{stage}/1_iou", self.val_1_iou.compute(), prog_bar=True)
-        self.log(f"iou/{stage}/OneD_fusion_iou", self.OneD_fusion_iou.compute(), prog_bar=True)
-        self.log("FrequencyIoU/"+stage+"/0", 
-                         self.val_0_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=False)
-        self.log("FrequencyIoU/"+stage+"/1", 
-                         self.val_1_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=True)
-        self.log("FrequencyIoU/"+stage+"/OneD_fusion", 
-                         self.OneD_fusion_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=True)
+        try :
+            self.log(f"iou/{stage}/0_iou", self.val_0_iou.compute(), prog_bar=False)
+            self.log(f"iou/{stage}/1_iou", self.val_1_iou.compute(), prog_bar=True)
+            self.log(f"iou/{stage}/OneD_fusion_iou", self.OneD_fusion_iou.compute(), prog_bar=True)
+            self.log("FrequencyIoU/"+stage+"/0", 
+                             self.val_0_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=False)
+            self.log("FrequencyIoU/"+stage+"/1", 
+                             self.val_1_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=True)
+            self.log("FrequencyIoU/"+stage+"/OneD_fusion", 
+                             self.OneD_fusion_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=True)
+        except:
+            print("Error in the iou compute or FrequencyIou")
         self.val_0_seg_metric.reset()
         self.val_1_seg_metric.reset()
         self.OneD_fusion_seg_metric.reset()
