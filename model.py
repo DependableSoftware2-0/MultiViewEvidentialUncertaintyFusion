@@ -334,6 +334,9 @@ class VirtualKittiModel(pl.LightningModule):
              self.val_1_seg_metric.meanIntersectionOverUnion(), prog_bar=False)
         self.log("FrequencyIoU/val_1",
              self.val_0_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=False)
+        print ("Val 1 Class Pixel Accuracy :", self.val_1_seg_metric.classPixelAccuracy())
+        print ("Val 1 Mean Pixel Accuracy :", self.val_1_seg_metric.meanPixelAccuracy())
+        print ("Val 1 IoU Per class :", self.val_1_seg_metric.IntersectionOverUnion())
         self.val_0_seg_metric.reset()
         self.val_1_seg_metric.reset()
 
@@ -344,6 +347,9 @@ class VirtualKittiModel(pl.LightningModule):
                  seg_metric.meanIntersectionOverUnion(), prog_bar=False)
             self.log("FrequencyIoU/"+fusion_name,
                  seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=False)
+            print ("Class Pixel Accuracy "+fusion_name, seg_metric.classPixelAccuracy())
+            print ("Mean Pixel Accuracy "+fusion_name, seg_metric.meanPixelAccuracy())
+            print ("IoU Per class "+fusion_name, seg_metric.IntersectionOverUnion())
 
             seg_metric.reset()
 
@@ -518,8 +524,18 @@ class SequenceVkitiModel(pl.LightningModule):
                              self.val_0_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=False)
             self.log("FrequencyIoU/"+stage+"/1", 
                              self.val_1_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=True)
+            print ("Val 1 Class Pixel Accuracy :", self.val_1_seg_metric.classPixelAccuracy())
+            print ("Val 1 Mean Pixel Accuracy :", self.val_1_seg_metric.meanPixelAccuracy())
+            print ("Val 1 IoU Per class :", self.val_1_seg_metric.IntersectionOverUnion())
             self.log("FrequencyIoU/"+stage+"/OneD_fusion", 
                              self.OneD_fusion_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=True)
+            self.log("PixelAccuracy"+stage+"/OneD_fusion", 
+                 self.OneD_fusion_seg_metric.pixelAccuracy(), prog_bar=False)
+            self.log("MeanIoU/"+stage+"/OneD_fusion" ,
+                 self.OneD_fusion_seg_metric.meanIntersectionOverUnion(), prog_bar=False)
+            print ("Class Pixel Accuracy", self.OneD_fusion_seg_metric.classPixelAccuracy())
+            print ("Mean Pixel Accuracy", self.OneD_fusion_seg_metric.meanPixelAccuracy())
+            print ("IoU Per class", self.OneD_fusion_seg_metric.IntersectionOverUnion())
         except:
             print("Error in the iou compute or FrequencyIou")
         self.val_0_seg_metric.reset()
