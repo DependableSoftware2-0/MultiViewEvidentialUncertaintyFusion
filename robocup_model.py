@@ -46,7 +46,7 @@ class RoboCupModel(pl.LightningModule):
 
 
         # for image segmentation dice loss could be the best first choice
-        self.loss_fn = smp.losses.DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+        self.dice_loss_fn = smp.losses.DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
         self.loss_fn = evidence_loss.edl_mse_loss
         self.n_classes = out_classes
         self.dataset_path = dataset_path

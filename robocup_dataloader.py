@@ -19,13 +19,13 @@ from kornia.augmentation import Resize
 from pytransform3d.transform_manager import TransformManager
 
 class RoboCupDataset(torch.utils.data.Dataset):
-    def __init__(self, root:str , mode="train", transform=None):
+    def __init__(self, root:str , mode="train", transforms=None):
 
         assert mode in {"train", "valid", "test"}
 
         self.root = root
         self.mode = mode
-        self.transform = transform
+        self.transforms = transforms
 
         self.files_directory = self.root
 
@@ -35,6 +35,7 @@ class RoboCupDataset(torch.utils.data.Dataset):
         self.classes = {0:0,  40:1, 88:2, 112:3, 136:2, 184:4, 208:5, 232:4} # naming both plastic tube and plastic
         self.blender_names = {0:'background',  40:'small allu', 88:'plastic tube', 112:'large allu', 136:'v plastic', 184:'large nut', 208:'bolt', 232:'small nut'}
         self.class_names = {0:'background',  1:'small allu', 2:'plastic tube', 3:'large allu', 4:'large nut', 5:'bolt'}
+        self.label_names = ['background',  'small allu', 'plastic tube', 'large allu', 'large nut', 'bolt']
 
     def __len__(self):
         return len(self.filenames)
@@ -48,12 +49,18 @@ class RoboCupDataset(torch.utils.data.Dataset):
             image = np.array(data['colors'])
             mask = np.array(data['class_segmaps'])
             
-        
+       
         mask = self._preprocess_mask(mask)
 
-        sample = dict(image=image, mask=mask)
-        if self.transform is not None:
-            sample = self.transform(**sample)
+        sample = {}
+        if self.transforms is not None:
+            transformed = self.transforms(image=image, 
+                                          mask=mask,
+                                          depth=None)
+
+            sample['image'] = transformed['image']
+            sample['mask'] = transformed['mask'].long()
+        
 
         return sample
 
@@ -75,6 +82,8 @@ class RoboCupDataset(torch.utils.data.Dataset):
             filenames = [x for i, x in enumerate(filenames) if i % 10 != 0]
         elif self.mode == "valid":  # 10% for validation
             filenames = [x for i, x in enumerate(filenames) if i % 10 == 0]
+
+        print ("Loaded image for "+self.mode+" : " , len(filenames))
         return filenames
 
 

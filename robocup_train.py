@@ -3,7 +3,8 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import DeviceStatsMonitor,LearningRateMonitor,TQDMProgressBar
 import torch
 
-dataset_path = '/scratch/dnair2m/images_robocup/'
+#dataset_path = '/scratch/dnair2m/images_robocup/'
+dataset_path = '/home/deebuls/Documents/phd/blender-dataset/learning_blenerproc/images_robocup'
 
 print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
 print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
