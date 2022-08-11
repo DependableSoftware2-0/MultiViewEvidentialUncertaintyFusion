@@ -1,0 +1,29 @@
+import robocup_model
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import DeviceStatsMonitor,LearningRateMonitor,TQDMProgressBar
+import torch
+
+dataset_path = '/scratch/dnair2m/images_robocup/'
+
+print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
+print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
+print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
+
+model = robocup_model.RoboCupModel("Unet", "resnet18", in_channels=3, out_classes=6, dataset_path=dataset_path)
+
+trainer = pl.Trainer(
+    accelerator='gpu', 
+    devices=1,
+    max_epochs=1,
+    callbacks=[LearningRateMonitor(logging_interval="step"), 
+               TQDMProgressBar(refresh_rate=1000)],
+    check_val_every_n_epoch=30,
+)
+
+trainer.fit(
+    model
+) 
+trainer.validate(
+    model
+) 
+                                        

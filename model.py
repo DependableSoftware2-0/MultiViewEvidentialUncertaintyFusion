@@ -25,8 +25,9 @@ from vkitti_dataloader import SequentialImageVirtualKittiDataset
 
 from kornia import image_to_tensor, tensor_to_image
 from kornia.augmentation import ColorJitter, RandomChannelShuffle, RandomThinPlateSpline
-from kornia.augmentation import RandomVerticalFlip, RandomHorizontalFlip, Resize, RandomCrop, RandomMotionBlur
-from kornia.augmentation import RandomEqualize, RandomGaussianBlur, RandomGaussianNoise, RandomSharpness
+from kornia.augmentation import RandomVerticalFlip, RandomHorizontalFlip, RandomMotionBlur
+from kornia.augmentation import RandomGaussianNoise, RandomSharpness, RandomCrop
+from kornia.augmentation import RandomEqualize, RandomGaussianBlur
 
 IMG_SIZE = 256
 old_k = np.array([[725.0087, 0, 620.5],
