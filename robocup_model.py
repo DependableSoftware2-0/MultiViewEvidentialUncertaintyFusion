@@ -32,7 +32,13 @@ IMG_SIZE = 512
 
 class RoboCupModel(pl.LightningModule):
 
-    def __init__(self, arch, encoder_name, in_channels, out_classes, **kwargs):
+    def __init__(self, 
+                 arch, 
+                 encoder_name, 
+                 in_channels, 
+                 out_classes, 
+                 dataset_path=None,
+                 **kwargs):
         super().__init__()
         self.model = smp.create_model(
             arch, encoder_name=encoder_name, in_channels=in_channels, classes=out_classes, **kwargs
@@ -43,6 +49,7 @@ class RoboCupModel(pl.LightningModule):
         self.loss_fn = smp.losses.DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
         self.loss_fn = evidence_loss.edl_mse_loss
         self.n_classes = out_classes
+        self.dataset_path = dataset_path
         
         self.kornia_pre_transform = vkitti_dataloader.Preprocess() #per image convert to tensor
         self.transform = torch.nn.Sequential(
@@ -237,3 +244,19 @@ class RoboCupModel(pl.LightningModule):
         optimizer=torch.optim.AdamW(self.parameters(), lr=0.001, weight_decay=1e-5, amsgrad=True)
         scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-4, last_epoch=-1)
         return {'optimizer': optimizer,'lr_scheduler':scheduler}
+
+    def train_dataloader(self):
+        dataset = RoboCupDataset(self.dataset_path, "train", transforms=self.kornia_pre_transform)
+        loader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=32)
+                            #persistent_workers=True, pin_memory=True)
+        self.label_names = dataset.label_names
+        print ('Training dataset length : ', len(dataset) )
+        return loader
+
+    def val_dataloader(self):
+        dataset = RoboCupDataset(self.dataset_path, "valid", transforms=self.kornia_pre_transform)
+        loader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=10)
+        self.label_names = dataset.label_names
+        print ('Vaidation dataset length : ', len(dataset))
+        return loader
+        
