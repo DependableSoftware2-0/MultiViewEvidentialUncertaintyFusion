@@ -112,8 +112,6 @@ class RoboCupModel(pl.LightningModule):
         #Remove pixels exculding the background loss function
         idx_only_objects = mask != self.ignore_class
         
-        
-        
         # Predicted mask contains logits, and loss_fn param `from_logits` is set to True       
         mask = F.one_hot(mask.to(torch.long), self.n_classes)  # [batch_size*height*width] -> [batch_size*height*width, n_classes]
         
@@ -153,6 +151,7 @@ class RoboCupModel(pl.LightningModule):
         pred_mask = pred_mask.reshape(bs, 1, height, width )
         mask = mask.reshape(bs, 1, height, width)
           
+        self.train_seg_metric.addBatch(pred_mask.long(), mask.long())
         # We will compute IoU metric by two ways
         #   1. dataset-wise
         #   2. image-wise
@@ -200,10 +199,17 @@ class RoboCupModel(pl.LightningModule):
         # Empty images influence a lot on per_image_iou and much less on dataset_iou.
         dataset_iou = smp.metrics.iou_score(tp, fp, fn, tn, reduction="micro")
 
+        # aggregate step metics
+        loss = [x["loss"].item() for x in outputs]
+        loss = sum(loss)/len(loss)
+        dice_loss = [x["dice_loss"] for x in outputs]
+        dice_loss = sum(dice_loss)/len(dice_loss)
         
         metrics = {
-            f"{stage}_per_image_iou": per_image_iou,
-            f"{stage}_dataset_iou": dataset_iou,
+            f"{stage}/per_image_iou": per_image_iou,
+            f"{stage}/dataset_iou": dataset_iou,
+            f"{stage}/evidential_loss": loss,
+            f"{stage}/dice_los": dice_loss,
         }
         
         self.log_dict(metrics, prog_bar=True)
@@ -213,7 +219,7 @@ class RoboCupModel(pl.LightningModule):
                                       display_labels=self.label_names)
         disp.plot(ax=ax)
         # log figure
-        self.logger.experiment.add_figure('train/confmat', fig, global_step=self.global_step)
+        self.logger.experiment.add_figure(f'{stage}/confmat', fig, global_step=self.global_step)
         
         self.log("FrequencyIoU/"+stage,
              self.train_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=False)
@@ -241,13 +247,13 @@ class RoboCupModel(pl.LightningModule):
         return self.shared_epoch_end(outputs, "test")
 
     def configure_optimizers(self):
-        optimizer=torch.optim.AdamW(self.parameters(), lr=0.001, weight_decay=1e-5, amsgrad=True)
+        optimizer=torch.optim.AdamW(self.parameters(), lr=0.0001, weight_decay=1e-5, amsgrad=True)
         scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-4, last_epoch=-1)
         return {'optimizer': optimizer,'lr_scheduler':scheduler}
 
     def train_dataloader(self):
         dataset = RoboCupDataset(self.dataset_path, "train", transforms=self.kornia_pre_transform)
-        loader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=32)
+        loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=32)
                             #persistent_workers=True, pin_memory=True)
         self.label_names = dataset.label_names
         print ('Training dataset length : ', len(dataset) )
@@ -255,7 +261,7 @@ class RoboCupModel(pl.LightningModule):
 
     def val_dataloader(self):
         dataset = RoboCupDataset(self.dataset_path, "valid", transforms=self.kornia_pre_transform)
-        loader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=10)
+        loader = DataLoader(dataset, batch_size=16, shuffle=False, num_workers=10)
         self.label_names = dataset.label_names
         print ('Vaidation dataset length : ', len(dataset))
         return loader
