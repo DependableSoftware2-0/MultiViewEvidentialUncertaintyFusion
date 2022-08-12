@@ -26,7 +26,6 @@ trainer = pl.Trainer(
                TQDMProgressBar(refresh_rate=1000)],
     check_val_every_n_epoch=5,
     #overfit_batches=2000
-    #resume_from_checkpoint="/home/dnair2m/multi-view-fusion-initial/lightning_logs/version_481766/checkpoints/epoch=19-step=15960.ckpt"
 )
 
 #trainer.validate(
@@ -57,7 +56,6 @@ trainer = pl.Trainer(
                TQDMProgressBar(refresh_rate=1000)],
     check_val_every_n_epoch=5,
     #overfit_batches=2000
-    #resume_from_checkpoint="/home/dnair2m/multi-view-fusion-initial/lightning_logs/version_481766/checkpoints/epoch=19-step=15960.ckpt"
 )
 print("#################")
 print ("FITTING 2D model")
