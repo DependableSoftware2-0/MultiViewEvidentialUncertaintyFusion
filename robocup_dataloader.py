@@ -48,7 +48,6 @@ class RoboCupDataset(torch.utils.data.Dataset):
         with h5py.File(file_path, 'r') as data: 
             image = np.array(data['colors'])
             mask = np.array(data['class_segmaps'])
-            
        
         mask = self._preprocess_mask(mask)
 
@@ -60,7 +59,6 @@ class RoboCupDataset(torch.utils.data.Dataset):
 
             sample['image'] = transformed['image']
             sample['mask'] = transformed['mask'].long()
-        
 
         return sample
 
@@ -85,5 +83,5 @@ class RoboCupDataset(torch.utils.data.Dataset):
 
         print ("Loaded image for "+self.mode+" : " , len(filenames))
         return filenames
-
+#======================================================================
 

@@ -11,13 +11,16 @@ print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1
 print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
 print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
-model = robocup_model.RoboCupModel("Unet", "resnet18", in_channels=3, out_classes=6, dataset_path=dataset_path)
+
+model = robocup_model.RoboCupModel("FPN", "resnet18", in_channels=3, out_classes=6, dataset_path=dataset_path)
+#model = robocup_model.RoboCupModel("FPN", "timm-mobilenetv3_small_minimal_100", in_channels=3, out_classes=6, dataset_path=dataset_path)
+#model = robocup_model.RoboCupModel("Unet", "resnet18", in_channels=3, out_classes=6, dataset_path=dataset_path)
 
 logger = TensorBoardLogger("lightning_logs", name="robocup")
 trainer = pl.Trainer(
     accelerator='gpu', 
     devices=1,
-    max_epochs=20,
+    max_epochs=100,
     callbacks=[LearningRateMonitor(logging_interval="step"), 
                TQDMProgressBar(refresh_rate=1000)],
     check_val_every_n_epoch=50,

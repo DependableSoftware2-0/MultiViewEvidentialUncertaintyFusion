@@ -44,6 +44,11 @@ class RoboCupModel(pl.LightningModule):
             arch, encoder_name=encoder_name, in_channels=in_channels, classes=out_classes, **kwargs
         )
 
+        # preprocessing parameteres for image
+        params = smp.encoders.get_preprocessing_params(encoder_name)
+        self.register_buffer("std", torch.tensor(params["std"]).view(1, 3, 1, 1))
+        self.register_buffer("mean", torch.tensor(params["mean"]).view(1, 3, 1, 1))
+
 
         # for image segmentation dice loss could be the best first choice
         self.dice_loss_fn = smp.losses.DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
@@ -53,13 +58,13 @@ class RoboCupModel(pl.LightningModule):
         
         self.kornia_pre_transform = vkitti_dataloader.Preprocess() #per image convert to tensor
         self.transform = torch.nn.Sequential(
-                RandomHorizontalFlip(p=0.30),
-                RandomChannelShuffle(p=0.10),
-                RandomThinPlateSpline(p=0.10),
-                RandomEqualize(p=0.2),
-                RandomGaussianBlur((3, 3), (0.1, 2.0), p=0.2),
-                RandomGaussianNoise(mean=0., std=1., p=0.2),
-                RandomSharpness(0.5, p=0.2)
+                #RandomHorizontalFlip(p=0.50),
+                #RandomChannelShuffle(p=0.10),
+                #RandomThinPlateSpline(p=0.10),
+                #RandomEqualize(p=0.2),
+                #RandomGaussianBlur((3, 3), (0.1, 2.0), p=0.2),
+                #RandomGaussianNoise(mean=0., std=1., p=0.2),
+                #RandomSharpness(0.5, p=0.2)
             )
      
         self.ignore_class = 0.0 #ignore background class  fr loss function
@@ -70,7 +75,7 @@ class RoboCupModel(pl.LightningModule):
 
     def forward(self, image):
         # normalize image here
-        #image = (image - self.mean) / self.std  check the ipact of this
+        image = (image - self.mean) / self.std 
         mask = self.model(image)
         return mask
 
@@ -171,14 +176,14 @@ class RoboCupModel(pl.LightningModule):
             "tn": tn,
         }
 
-    def on_after_batch_transfer(self, batch, dataloader_idx):
-        if self.trainer.training:
-            image = batch["image"]
-            mask = batch["mask"]
-            image = self.transform(image)  # => we perform GPU/Batched data augmentation
-            return {'image':image , 'mask':mask}
-        else:
-            return batch
+    #def on_after_batch_transfer(self, batch, dataloader_idx):
+    #    if self.trainer.training:
+    #        image = batch["image"]
+    #        mask = batch["mask"]
+    #        image = self.transform(image)  # => we perform GPU/Batched data augmentation
+    #        return {'image':image , 'mask':mask}
+    #    else:
+    #        return batch
 
     def shared_epoch_end(self, outputs, stage):
         
@@ -248,7 +253,7 @@ class RoboCupModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer=torch.optim.AdamW(self.parameters(), lr=0.0001, weight_decay=1e-5, amsgrad=True)
-        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-4, last_epoch=-1)
+        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-5, last_epoch=-1)
         return {'optimizer': optimizer,'lr_scheduler':scheduler}
 
     def train_dataloader(self):
@@ -266,3 +271,7 @@ class RoboCupModel(pl.LightningModule):
         print ('Vaidation dataset length : ', len(dataset))
         return loader
         
+
+
+#====================================================================
+
