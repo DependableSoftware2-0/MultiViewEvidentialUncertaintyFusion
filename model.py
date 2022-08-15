@@ -54,10 +54,17 @@ class VirtualKittiModel(pl.LightningModule):
         self.model = smp.create_model(
             arch, 
             encoder_name=encoder_name, 
+            encoder_weights = "imagenet",
             in_channels=in_channels, 
             classes=out_classes, 
             #**kwargs
         )
+        # preprocessing parameteres for image
+        params = smp.encoders.get_preprocessing_params(encoder_name)
+        self.register_buffer("std", torch.tensor(params["std"]).view(1, 3, 1, 1))
+        self.register_buffer("mean", torch.tensor(params["mean"]).view(1, 3, 1, 1))
+        print ("dataset std : ", self.std)
+        print ("dataset mean : ", self.mean)
 
         self.epipolar_propagation = epipolar_geometry.EpipolarPropagation(K, 
                                    Kinv, 
@@ -121,6 +128,8 @@ class VirtualKittiModel(pl.LightningModule):
         
 
     def forward(self, image):
+        # normalize image here
+        image = (image - self.mean) / self.std 
         mask = self.model(image)
         return mask
 
@@ -206,6 +215,8 @@ class VirtualKittiModel(pl.LightningModule):
         
     def on_after_batch_transfer(self, batch, dataloader_idx):
         if self.trainer.training:
+            # normalize image here
+            #image = (batch["image"]- self.mean) / self.std 
             image = batch["image"]
             mask = batch["mask"]
             image = self.transform(image)  # => we perform GPU/Batched data augmentation

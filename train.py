@@ -6,11 +6,17 @@ import torch
 dataset_path = '/scratch/dnair2m/virtual_kitti_h5/'
 #dataset_path = '/home/deebuls/Documents/phd/dataset/virtual_kitti_h5/'
 
+MODEL_PATH = './vkitti_timm-resnest14d.pt'
 print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
 print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
 print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
-vkitti_model = model.VirtualKittiModel("Unet", "resnet18", in_channels=3, out_classes=7, dataset_path=dataset_path)
+vkitti_model = model.VirtualKittiModel("Unet", 
+                                       "timm-resnest14d", 
+                                       in_channels=3, 
+                                       out_classes=7, 
+                                       dataset_path=dataset_path)
+#vkitti_model = model.VirtualKittiModel("Unet", "resnet18", in_channels=3, out_classes=7, dataset_path=dataset_path)
 
 trainer = pl.Trainer(
     accelerator='gpu', 
@@ -29,7 +35,6 @@ trainer.validate(
     vkitti_model
 ) 
                                         
-MODEL_PATH = './vkitti_cluster_trained.pt'
 torch.save(vkitti_model.model, MODEL_PATH)
 
 #sequence_1d_model = model.SequenceVkitiModel(model_path=MODEL_PATH,
