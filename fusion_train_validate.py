@@ -23,13 +23,9 @@ def parse_args():
     ap.add_argument('--architecture',
                     choices=['resnet18', 'resnest', 'efficientnet'],
                     help='select architecture resnet18 or regnext or mobilenet')
-    ap.add_argument('--test',
+    ap.add_argument('--slurm_id',
                     default=None,
                     help='Provide folder name (SLURM ID) to test')
-    ap.add_argument('--max_epochs',
-                    type=int,
-                    default=100,
-                    help='max epochs of run')
     #ADD MAX EPOCHS ARGUMENT
     return ap.parse_args()
 
@@ -37,12 +33,10 @@ def parse_args():
 if __name__ == '__main__':
 
     args = parse_args()
-    print (args)
-    if args.test is not None:
-        SLURM_JOB_ID = args.test
-        MODEL_DIR = os.path.join(BASE_DIR, SLURM_JOB_ID)
-        print ("Directory to load : ", MODEL_DIR)
-        assert os.path.isdir(MODEL_DIR)
+    OLD_SLURM_JOB_ID = args.slurm_id
+    MODEL_DIR = os.path.join(BASE_DIR, OLD_SLURM_JOB_ID)
+    print ("OLD Directory to load : ", MODEL_DIR)
+    assert os.path.isdir(MODEL_DIR)
         
 
     print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
@@ -78,34 +72,27 @@ if __name__ == '__main__':
                                             out_classes=OUT_CLASSES, 
                                             train_dataset_path=TRAIN_DATASET_PATH,
                                             valid_dataset_path=VAL_DATASET_PATH)
-         
     else:
         raise Exception("Wrong --dataset argument")
 
     MODEL_PATH = MODEL_DIR+'/'+args.dataset+'_'+args.architecture+'.pt'
     logger = TensorBoardLogger("lightning_logs", name=args.dataset, version=SLURM_JOB_ID, sub_dir="train")
-    trainer = pl.Trainer(
-        accelerator='gpu', 
-        #devices=1,
-        max_epochs=args.max_epochs,
-        callbacks=[LearningRateMonitor(logging_interval="step"), 
-                   TQDMProgressBar(refresh_rate=1000)],
-        check_val_every_n_epoch=10,
-        logger=logger,
-        enable_checkpointing=False,
-        #overfit_batches=2000
-    )
+    #trainer = pl.Trainer(
+    #    accelerator='gpu', 
+    #    #devices=1,
+    #    max_epochs=1,
+    #    callbacks=[LearningRateMonitor(logging_interval="step"), 
+    #               TQDMProgressBar(refresh_rate=1000)],
+    #    check_val_every_n_epoch=30,
+    #    logger=logger,
+    #    enable_checkpointing=False,
+    #    #overfit_batches=2000
+    #)
     
 
-    if args.test is None:
-        trainer.fit( model) 
-        os.mkdir(MODEL_DIR)
-        torch.save(model.model, MODEL_PATH)
-        trainer.validate( model) 
-        trainer.test(model)
-    else:
-        model.model = torch.load(MODEL_PATH)
-        trainer.test(model)
+    #model.model = torch.load(MODEL_PATH)
+    #trainer.validate( model) 
+    #trainer.test(model)
     
     del model
     #################################################################################
@@ -129,7 +116,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(
         accelerator='gpu', 
         #devices=1,
-        max_epochs=10,
+        max_epochs=20,
         callbacks=[LearningRateMonitor(logging_interval="step"), 
                    TQDMProgressBar(refresh_rate=1000)],
         check_val_every_n_epoch=5,
@@ -138,14 +125,11 @@ if __name__ == '__main__':
         #overfit_batches=2000
     )
 
-    if args.test is None:
-        trainer.fit( sequence_1d_model) 
-        torch.save(sequence_1d_model.conv_1d, CONV_MODEL_PATH)
-        trainer.validate( sequence_1d_model ) 
-        trainer.test(sequence_1d_model)
-    else:
-        sequence_1d_model.conv_1d = torch.load(CONV_MODEL_PATH)
-        trainer.test(sequence_1d_model)
+    trainer.fit( sequence_1d_model) 
+    print ("saving 1D fusion to ", CONV_MODEL_PATH)
+    torch.save(sequence_1d_model.conv_1d, CONV_MODEL_PATH)
+    trainer.validate( sequence_1d_model ) 
+    trainer.test(sequence_1d_model)
     del sequence_1d_model
 
     #################################################################################
@@ -169,7 +153,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(
         accelerator='gpu', 
         #devices=1,
-        max_epochs=10,
+        max_epochs=20,
         callbacks=[LearningRateMonitor(logging_interval="step"), 
                    TQDMProgressBar(refresh_rate=1000)],
         check_val_every_n_epoch=5,
@@ -177,15 +161,12 @@ if __name__ == '__main__':
         enable_checkpointing=False,
         #overfit_batches=2000
     )
-    if args.test is None:
-        trainer.fit( sequence_2d_model) 
-        torch.save(sequence_2d_model.conv_1d, CONV_MODEL_PATH)
-        trainer.validate( sequence_2d_model ) 
-        trainer.test(sequence_2d_model)
-    else:
-        sequence_2d_model.conv_1d = torch.load(CONV_MODEL_PATH)
-        trainer.test(sequence_2d_model)
-     
+    trainer.fit( sequence_2d_model) 
+    print ("saving 2D fusion to ", CONV_MODEL_PATH)
+    torch.save(sequence_2d_model.conv_1d, CONV_MODEL_PATH)
+    trainer.validate( sequence_2d_model ) 
+    trainer.test(sequence_2d_model)
+
     del sequence_2d_model
 
 
