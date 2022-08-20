@@ -615,7 +615,7 @@ class SequenceVkitiModel(pl.LightningModule):
                                       display_labels=self.label_names)
         disp.plot(ax=ax)
         # log figure
-        self.logger.experiment.add_figure(stage+'/confmat', fig, global_step=self.global_step)
+        self.logger.experiment.add_figure(stage+'/confmat'+self.convolution_type, fig, global_step=self.global_step)
         
         #np.save(CM_FILE_NAME, self.train_cm.compute().cpu().numpy())
     
