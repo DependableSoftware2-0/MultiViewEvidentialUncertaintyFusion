@@ -492,6 +492,10 @@ class SequenceVkitiModel(pl.LightningModule):
             raise 
 
 
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d):
+                if m is self.conv_1d:
+                    torch.nn.init.normal_(m.weight, mean=0.0, std=0.01)
     
     def forward(self, batch):
         #Freezing the network
@@ -578,7 +582,7 @@ class SequenceVkitiModel(pl.LightningModule):
         try :
             self.log(f"iou/{stage}/0_iou", self.val_0_iou.compute(), prog_bar=False)
             self.log(f"iou/{stage}/1_iou", self.val_1_iou.compute(), prog_bar=True)
-            self.log(f"iou/{stage}/OneD_fusion_iou", self.OneD_fusion_iou.compute(), prog_bar=True)
+            self.log(f"iou/{stage}/"+self.convolution_type, self.OneD_fusion_iou.compute(), prog_bar=True)
             self.log("FrequencyIoU/"+stage+"/0", 
                              self.val_0_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=False)
             self.log("FrequencyIoU/"+stage+"/1", 
@@ -586,15 +590,15 @@ class SequenceVkitiModel(pl.LightningModule):
             print ("Val 1 Class Pixel Accuracy :", self.val_1_seg_metric.classPixelAccuracy())
             print ("Val 1 Mean Pixel Accuracy :", self.val_1_seg_metric.meanPixelAccuracy())
             print ("Val 1 IoU Per class :", self.val_1_seg_metric.IntersectionOverUnion())
-            self.log("FrequencyIoU/"+stage+"/OneD_fusion", 
+            self.log("FrequencyIoU/"+stage+"/"+self.convolution_type, 
                              self.OneD_fusion_seg_metric.Frequency_Weighted_Intersection_over_Union(), prog_bar=True)
-            self.log("PixelAccuracy"+stage+"/OneD_fusion", 
+            self.log("PixelAccuracy"+stage+"/"+self.convolution_type, 
                  self.OneD_fusion_seg_metric.pixelAccuracy(), prog_bar=False)
-            self.log("MeanIoU/"+stage+"/OneD_fusion" ,
+            self.log("MeanIoU/"+stage+"/"+self.convolution_type,
                  self.OneD_fusion_seg_metric.meanIntersectionOverUnion(), prog_bar=False)
-            print ("Class Pixel Accuracy", self.OneD_fusion_seg_metric.classPixelAccuracy())
-            print ("Mean Pixel Accuracy", self.OneD_fusion_seg_metric.meanPixelAccuracy())
-            print ("IoU Per class", self.OneD_fusion_seg_metric.IntersectionOverUnion())
+            print ("Class Pixel Accuracy "+self.convolution_type, self.OneD_fusion_seg_metric.classPixelAccuracy())
+            print ("Mean Pixel Accuracy "+self.convolution_type, self.OneD_fusion_seg_metric.meanPixelAccuracy())
+            print ("IoU Per class "+self.convolution_type, self.OneD_fusion_seg_metric.IntersectionOverUnion())
         except:
             print("Error in the iou compute or FrequencyIou")
         self.val_0_seg_metric.reset()

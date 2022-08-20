@@ -21,7 +21,7 @@ def parse_args():
                     choices=['vkitti', 'robocup'],
                     help='select dataset vkitti or robocup')
     ap.add_argument('--architecture',
-                    choices=['resnet18', 'resnest', 'efficientnet'],
+                    choices=['resnet18', 'resnest', 'efficientnet', 'mobilenet'],
                     help='select architecture resnet18 or regnext or mobilenet')
     ap.add_argument('--test',
                     default=None,
@@ -55,6 +55,8 @@ if __name__ == '__main__':
         ENCODER_NAME = 'timm-resnest14d' 
     elif args.architecture == 'efficientnet':
         ENCODER_NAME = 'efficientnet-b1'
+    elif args.architecture == 'mobilenet':
+        ENCODER_NAME = 'timm-mobilenetv3_small_minimal_100'
     else:
         raise Exception("Wrong --architecture argument")
 
@@ -90,7 +92,7 @@ if __name__ == '__main__':
         max_epochs=args.max_epochs,
         callbacks=[LearningRateMonitor(logging_interval="step"), 
                    TQDMProgressBar(refresh_rate=1000)],
-        check_val_every_n_epoch=10,
+        check_val_every_n_epoch=30,
         logger=logger,
         enable_checkpointing=False,
         #overfit_batches=2000
@@ -116,7 +118,8 @@ if __name__ == '__main__':
                                                      convolution_type='1D')                                       
     elif args.dataset == 'robocup':
         sequence_1d_model = robocup_model.SequenceRobocupModel(model_path=MODEL_PATH,
-                                                     dataset_path=VAL_DATASET_PATH,
+                                                     train_dataset_path=TRAIN_DATASET_PATH,
+                                                     valid_dataset_path=VAL_DATASET_PATH,
                                                      encoder_name=ENCODER_NAME,
                                                      convolution_type='1D',
                                                      out_classes=OUT_CLASSES)                                       
@@ -129,7 +132,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(
         accelerator='gpu', 
         #devices=1,
-        max_epochs=10,
+        max_epochs=20,
         callbacks=[LearningRateMonitor(logging_interval="step"), 
                    TQDMProgressBar(refresh_rate=1000)],
         check_val_every_n_epoch=5,
@@ -156,7 +159,8 @@ if __name__ == '__main__':
                                                      convolution_type='2D')                                       
     elif args.dataset == 'robocup':
         sequence_2d_model = robocup_model.SequenceRobocupModel(model_path=MODEL_PATH,
-                                                     dataset_path=VAL_DATASET_PATH,
+                                                     train_dataset_path=TRAIN_DATASET_PATH,
+                                                     valid_dataset_path=VAL_DATASET_PATH,
                                                      encoder_name=ENCODER_NAME,
                                                      convolution_type='2D',
                                                      out_classes=OUT_CLASSES)                                       
@@ -169,7 +173,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(
         accelerator='gpu', 
         #devices=1,
-        max_epochs=10,
+        max_epochs=20,
         callbacks=[LearningRateMonitor(logging_interval="step"), 
                    TQDMProgressBar(refresh_rate=1000)],
         check_val_every_n_epoch=5,

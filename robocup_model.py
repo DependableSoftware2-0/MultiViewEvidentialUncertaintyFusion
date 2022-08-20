@@ -434,12 +434,11 @@ class RoboCupModel(pl.LightningModule):
 
 class SequenceRobocupModel(pl.LightningModule):
 
-    def __init__(self, model_path, dataset_path, encoder_name, convolution_type, out_classes):
+    def __init__(self, model_path, train_dataset_path, valid_dataset_path, encoder_name, convolution_type, out_classes):
         super().__init__()
 
         self.save_hyperparameters()
 
-        self.dataset_path = dataset_path
         self.model_path = model_path
         self.model = torch.load(model_path)
         # preprocessing parameteres for image
@@ -454,7 +453,8 @@ class SequenceRobocupModel(pl.LightningModule):
 
         # preprocessing parameteres for image
         self.n_classes = out_classes
-        self.dataset_path = dataset_path
+        self.train_dataset_path = train_dataset_path
+        self.valid_dataset_path = valid_dataset_path
                         
         self.loss_fn = evidence_loss.edl_mse_loss
         self.convolution_type = convolution_type
@@ -491,7 +491,10 @@ class SequenceRobocupModel(pl.LightningModule):
         else:
             raise 
 
-
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d):
+                if m is self.conv_1d:
+                    torch.nn.init.normal_(m.weight, mean=0.0, std=0.01)
     
     def forward(self, batch):
         #Freezing the network
@@ -658,7 +661,7 @@ class SequenceRobocupModel(pl.LightningModule):
         return {'optimizer': optimizer,'lr_scheduler':scheduler}
 
     def train_dataloader(self):
-        dataset = SequentialRobocupDataset(self.dataset_path, "two_sequence", transforms=self.kornia_pre_transform)
+        dataset = SequentialRobocupDataset(self.train_dataset_path, "two_sequence", transforms=self.kornia_pre_transform)
         loader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=10,
                             persistent_workers=True, pin_memory=True)
         self.label_names = dataset.label_names
@@ -672,7 +675,7 @@ class SequenceRobocupModel(pl.LightningModule):
         return loader
 
     def val_dataloader(self):
-        dataset = SequentialRobocupDataset(self.dataset_path, "two_sequence", transforms=self.kornia_pre_transform)
+        dataset = SequentialRobocupDataset(self.valid_dataset_path, "two_sequence", transforms=self.kornia_pre_transform)
         loader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=10,
                             persistent_workers=True, pin_memory=True)
         self.label_names = dataset.label_names
@@ -686,7 +689,7 @@ class SequenceRobocupModel(pl.LightningModule):
         return loader
 
     def test_dataloader(self):
-        dataset = SequentialRobocupDataset(self.dataset_path, "two_sequence", transforms=self.kornia_pre_transform)
+        dataset = SequentialRobocupDataset(self.valid_dataset_path, "two_sequence", transforms=self.kornia_pre_transform)
         loader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=10,
                             persistent_workers=True, pin_memory=True)
         self.label_names = dataset.label_names
