@@ -71,7 +71,8 @@ if __name__ == '__main__':
                                         dataset_path=TRAIN_DATASET_PATH)
     elif args.dataset == 'robocup':
         ARCH_NAME = 'FPN' 
-        OUT_CLASSES = 6
+        #OUT_CLASSES = 6
+        OUT_CLASSES = 7 #added nut class for incresing difficulty
         TRAIN_DATASET_PATH = '/scratch/dnair2m/images_robocup/'
         VAL_DATASET_PATH = '/scratch/dnair2m/images_pose_robocup/'
         model = robocup_model.RoboCupModel(ARCH_NAME,

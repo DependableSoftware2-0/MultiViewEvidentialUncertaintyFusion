@@ -34,8 +34,10 @@ class RoboCupDataset(torch.utils.data.Dataset):
         #changing self classes also update classes below in pre process
         self.classes = {0:0,  40:1, 88:2, 112:3, 136:2, 184:4, 208:5, 232:4} # naming both plastic tube and plastic
         self.blender_names = {0:'background',  40:'small allu', 88:'plastic tube', 112:'large allu', 136:'v plastic', 184:'large nut', 208:'bolt', 232:'small nut'}
-        self.class_names = {0:'background',  1:'small allu', 2:'plastic tube', 3:'large allu', 4:'large nut', 5:'bolt'}
-        self.label_names = ['background',  'small allu', 'plastic tube', 'large allu', 'large nut', 'bolt']
+        #self.class_names = {0:'background',  1:'small allu', 2:'plastic tube', 3:'large allu', 4:'large nut', 5:'bolt'}
+        #self.label_names = ['background',  'small allu', 'plastic tube', 'large allu', 'large nut', 'bolt']
+        self.class_names = {0:'background',  1:'small allu', 2:'plastic tube', 3:'large allu', 4:'large nut', 5:'bolt', 6:'small nut'}
+        self.label_names = ['background',  'small allu', 'plastic tube', 'large allu', 'large nut', 'bolt', 'small nut']
 
     def __len__(self):
         return len(self.filenames)
@@ -64,7 +66,7 @@ class RoboCupDataset(torch.utils.data.Dataset):
 
     @staticmethod
     def _preprocess_mask(mask):
-        classes = {0:0,  40:1, 88:2, 112:3, 136:2, 184:4, 208:5, 232:4} # naming both plastic tube and plastic
+        classes = {0:0,  40:1, 88:2, 112:3, 136:2, 184:4, 208:5, 232:6} # naming both plastic tube and plastic
 
         mask = mask.astype(np.float32)
         #Remove this and do it in before loading data and save as h5p5
@@ -102,8 +104,10 @@ class SequentialRobocupDataset(torch.utils.data.Dataset):
         #changing self classes also update classes below in pre process
         self.classes = {0:0,  40:1, 88:2, 112:3, 136:2, 184:4, 208:5, 232:4} # naming both plastic tube and plastic
         self.blender_names = {0:'background',  40:'small allu', 88:'plastic tube', 112:'large allu', 136:'v plastic', 184:'large nut', 208:'bolt', 232:'small nut'}
-        self.class_names = {0:'background',  1:'small allu', 2:'plastic tube', 3:'large allu', 4:'large nut', 5:'bolt'}
-        self.label_names = ['background',  'small allu', 'plastic tube', 'large allu', 'large nut', 'bolt']
+        #self.class_names = {0:'background',  1:'small allu', 2:'plastic tube', 3:'large allu', 4:'large nut', 5:'bolt'}
+        #self.label_names = ['background',  'small allu', 'plastic tube', 'large allu', 'large nut', 'bolt']
+        self.class_names = {0:'background',  1:'small allu', 2:'plastic tube', 3:'large allu', 4:'large nut', 5:'bolt', 6:'small nut'}
+        self.label_names = ['background',  'small allu', 'plastic tube', 'large allu', 'large nut', 'bolt', 'small nut']
         #Saving Camera Matrix K and its inverse
         if self.mode ==  "train" or self.mode == "valid": 
             filename = self.filenames[0]
@@ -238,7 +242,7 @@ class SequentialRobocupDataset(torch.utils.data.Dataset):
 
     @staticmethod
     def _preprocess_mask(mask):
-        classes = {0:0,  40:1, 88:2, 112:3, 136:2, 184:4, 208:5, 232:4} # naming both plastic tube and plastic
+        classes = {0:0,  40:1, 88:2, 112:3, 136:2, 184:4, 208:5, 232:6} # naming both plastic tube and plastic
 
         mask = mask.astype(np.float32)
         #Remove this and do it in before loading data and save as h5p5

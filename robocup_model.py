@@ -63,13 +63,13 @@ class RoboCupModel(pl.LightningModule):
         
         self.kornia_pre_transform = vkitti_dataloader.Preprocess() #per image convert to tensor
         self.transform = torch.nn.Sequential(
-                #RandomHorizontalFlip(p=0.50),
-                #RandomChannelShuffle(p=0.10),
-                #RandomThinPlateSpline(p=0.10),
-                #RandomEqualize(p=0.2),
-                #RandomGaussianBlur((3, 3), (0.1, 2.0), p=0.2),
-                #RandomGaussianNoise(mean=0., std=1., p=0.2),
-                #RandomSharpness(0.5, p=0.2)
+                RandomHorizontalFlip(p=0.50),
+                RandomChannelShuffle(p=0.10),
+                RandomThinPlateSpline(p=0.10),
+                RandomEqualize(p=0.2),
+                RandomGaussianBlur((3, 3), (0.1, 2.0), p=0.2),
+                RandomGaussianNoise(mean=0., std=1., p=0.2),
+                RandomSharpness(0.5, p=0.2)
             )
         self.ignore_class = 0.0 #ignore background class  fr loss function
        
@@ -446,10 +446,6 @@ class SequenceRobocupModel(pl.LightningModule):
         self.register_buffer("std", torch.tensor(params["std"]).view(1, 3, 1, 1))
         self.register_buffer("mean", torch.tensor(params["mean"]).view(1, 3, 1, 1))
 
-        #Freezing the network
-        self.model.eval()
-        for param in self.model.parameters():
-            param.requires_grad = False
 
         # preprocessing parameteres for image
         self.n_classes = out_classes
@@ -488,19 +484,26 @@ class SequenceRobocupModel(pl.LightningModule):
                                            device=self.device),
                              torch.nn.Upsample(size=(512,512), mode = 'nearest') #Make the image size auto
                             )
+        elif convolution_type == 'DIRICHLET':
+            self.DS_combine = uncertain_fusion.DempsterSchaferCombine(self.n_classes)
+            pass
+        elif convolution_type == 'MEAN':
+            self.mean_combine = uncertain_fusion.MeanUncertainty(self.n_classes)
+            pass
         else:
             raise 
 
-        for m in self.modules():
-            if isinstance(m, torch.nn.Conv2d):
-                if m is self.conv_1d:
-                    torch.nn.init.normal_(m.weight, mean=0.0, std=0.01)
+        #for m in self.modules():
+        #    if isinstance(m, torch.nn.Conv2d):
+        #        if m is self.conv_1d:
+        #            torch.nn.init.normal_(m.weight, mean=0.0, std=0.01)
     
     def forward(self, batch):
         #Freezing the network
-        self.model.eval()
-        for param in self.model.parameters():
-            param.requires_grad = False
+        if '1D' == self.convolution_type or '2D' == self.convolution_type:
+            self.model.eval()
+            for param in self.model.parameters():
+                param.requires_grad = False
 
         # normalize image
         normalized_image = (batch["image0"] - self.mean) / self.std 
@@ -514,19 +517,30 @@ class SequenceRobocupModel(pl.LightningModule):
         # normalize image
         normalized_image = (batch["image1"] - self.mean) / self.std 
         logits_mask1 = self.model(normalized_image)
-        fused_mask = torch.concat((propagate_mask0,logits_mask1), dim=1)
-        fused_mask = self.conv_1d(fused_mask)
 
-        logits_mask0 = F.relu(logits_mask0) + 1
-        logits_mask1 = F.relu(logits_mask1) + 1
-        #fused_mask = F.relu(fused_mask) + 1
+        if 'DIRICHLET'== self.convolution_type:
+            logits_mask1 = F.relu(logits_mask1) + 1
+            propagate_mask0 = F.relu(propagate_mask0) + 1
+            fused_mask = self.DS_combine(propagate_mask0, logits_mask1)
+        elif 'MEAN' == self.convolution_type:
+            logits_mask1 = F.relu(logits_mask1) + 1
+            propagate_mask0 = F.relu(propagate_mask0) + 1
+            fused_mask = self.mean_combine(propagate_mask0, logits_mask1)
+        elif '1D' == self.convolution_type or '2D' == self.convolution_type:
+            fused_mask = torch.concat((propagate_mask0,logits_mask1), dim=1)
+            fused_mask = self.conv_1d(fused_mask)
+            #for convolution first fuse then add 
+            logits_mask1 = F.relu(logits_mask1) + 1
+            logits_mask0 = F.relu(logits_mask0) + 1
+            propagate_mask0 = F.relu(propagate_mask0) + 1
+            fused_mask = F.relu(fused_mask) + 1
         
         return logits_mask0, propagate_mask0, logits_mask1, fused_mask
     
    
         
         
-    def shared_step(self, batch, stage):
+    def shared_step(self, batch, stage, batch_idx):
         # Shape of the image should be (batch_size, num_channels, height, width)
         # if you work with grayscale images, expand channels dim to have [batch_size, 1, height, width]
         assert batch["image0"].ndim == 4
@@ -542,15 +556,26 @@ class SequenceRobocupModel(pl.LightningModule):
         assert batch["mask1"].ndim == 4
         
         logits_mask0, propagate_mask0, logits_mask1, fused_mask = self.forward(batch)
-        
-        fused_mask = fused_mask.permute(0,2,3,1)
-        # [batch_size, height*width, n_classes] -> [batch_size*height*width, n_classes]
-        fused_mask = fused_mask.reshape(-1, self.n_classes)
+
         mask = torch.ravel(batch["mask1"])
         # [batch_size*height*width] -> [batch_size*height*width, n_classes] 
         mask = F.one_hot(mask.to(torch.long), self.n_classes)
-        #loss = self.loss_fn(fused_mask, mask, self.current_epoch, self.n_classes, 5)
-        loss = F.cross_entropy(fused_mask, mask.argmax(dim=1).to(torch.long))
+        if self.convolution_type == 'DIRICHLET' or self.convolution_type == 'MEAN':
+            loss = 0
+            for t in [logits_mask1, fused_mask]:
+                t = t.permute(0,2,3,1)
+                # [batch_size, height*width, n_classes] -> [batch_size*height*width, n_classes]
+                t = t.reshape(-1, self.n_classes)
+                loss += self.loss_fn(t, mask, self.current_epoch, self.n_classes, 5)
+            loss = loss/2.0
+            fused_mask = fused_mask.permute(0,2,3,1)
+            # [batch_size, height*width, n_classes] -> [batch_size*height*width, n_classes]
+            fused_mask = fused_mask.reshape(-1, self.n_classes)
+        else :
+            fused_mask = fused_mask.permute(0,2,3,1)
+            # [batch_size, height*width, n_classes] -> [batch_size*height*width, n_classes]
+            fused_mask = fused_mask.reshape(-1, self.n_classes)
+            loss = F.cross_entropy(fused_mask, mask.argmax(dim=1).to(torch.long))
         self.log(f"{stage}/evidential_loss", loss, prog_bar=True)
         
         fused_mask = F.relu(fused_mask) + 1
@@ -619,13 +644,13 @@ class SequenceRobocupModel(pl.LightningModule):
         return       
 
     def training_step(self, batch, batch_idx):
-        return self.shared_step(batch, "train")            
+        return self.shared_step(batch, "train", batch_idx)            
 
     def training_epoch_end(self, outputs):
         return self.shared_epoch_end(outputs, "train")
 
     def validation_step(self, batch, batch_idx): 
-        return self.shared_step(batch, "valid")
+        return self.shared_step(batch, "valid", batch_idx)
 
     def validation_epoch_end(self, outputs):
         return self.shared_epoch_end(outputs, "valid")
@@ -653,16 +678,19 @@ class SequenceRobocupModel(pl.LightningModule):
         # log figure
         return
     def configure_optimizers(self):
-        #optimizer=torch.optim.AdamW(filter(lambda p: p.requires_grad, self.parameters()), lr=0.0001, weight_decay=1e-5)
-        optimizer=torch.optim.AdamW( self.conv_1d.parameters(), lr=1e-3, weight_decay=1e-5)
-        #scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
-        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-5, last_epoch=-1)
+        if '1D' == self.convolution_type or '2D' == self.convolution_type:
+            optimizer=torch.optim.AdamW( self.conv_1d.parameters(), lr=1e-3, weight_decay=1e-5)
+            scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-5, last_epoch=-1)
+        else:
+            optimizer=torch.optim.AdamW(self.parameters(), lr=1e-3, weight_decay=1e-5, amsgrad=True)
+            scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6, last_epoch=-1)
+            #scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
     
         return {'optimizer': optimizer,'lr_scheduler':scheduler}
 
     def train_dataloader(self):
         dataset = SequentialRobocupDataset(self.train_dataset_path, "two_sequence", transforms=self.kornia_pre_transform)
-        loader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=10,
+        loader = DataLoader(dataset, batch_size=4, shuffle=False, num_workers=10,
                             persistent_workers=True, pin_memory=True)
         self.label_names = dataset.label_names
         print ('training dataset length : ', len(dataset))
@@ -676,7 +704,7 @@ class SequenceRobocupModel(pl.LightningModule):
 
     def val_dataloader(self):
         dataset = SequentialRobocupDataset(self.valid_dataset_path, "two_sequence", transforms=self.kornia_pre_transform)
-        loader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=10,
+        loader = DataLoader(dataset, batch_size=4, shuffle=False, num_workers=10,
                             persistent_workers=True, pin_memory=True)
         self.label_names = dataset.label_names
         print ('Vaidation dataset length : ', len(dataset))
@@ -690,7 +718,7 @@ class SequenceRobocupModel(pl.LightningModule):
 
     def test_dataloader(self):
         dataset = SequentialRobocupDataset(self.valid_dataset_path, "two_sequence", transforms=self.kornia_pre_transform)
-        loader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=10,
+        loader = DataLoader(dataset, batch_size=4, shuffle=False, num_workers=10,
                             persistent_workers=True, pin_memory=True)
         self.label_names = dataset.label_names
         print ('Training dataset length : ', len(dataset))

@@ -65,7 +65,8 @@ if __name__ == '__main__':
                                         dataset_path=TRAIN_DATASET_PATH)
     elif args.dataset == 'robocup':
         ARCH_NAME = 'FPN' 
-        OUT_CLASSES = 6
+        #OUT_CLASSES = 6
+        OUT_CLASSES = 7 #added nut class for incresing difficulty
         TRAIN_DATASET_PATH = '/scratch/dnair2m/images_robocup/'
         VAL_DATASET_PATH = '/scratch/dnair2m/images_pose_robocup/'
         model = robocup_model.RoboCupModel(ARCH_NAME,
@@ -79,24 +80,7 @@ if __name__ == '__main__':
 
     MODEL_PATH = MODEL_DIR+'/'+args.dataset+'_'+args.architecture+'.pt'
     logger = TensorBoardLogger("lightning_logs", name=args.dataset, version=SLURM_JOB_ID, sub_dir="train")
-    #trainer = pl.Trainer(
-    #    accelerator='gpu', 
-    #    #devices=1,
-    #    max_epochs=1,
-    #    callbacks=[LearningRateMonitor(logging_interval="step"), 
-    #               TQDMProgressBar(refresh_rate=1000)],
-    #    check_val_every_n_epoch=30,
-    #    logger=logger,
-    #    enable_checkpointing=False,
-    #    #overfit_batches=2000
-    #)
-    
 
-    #model.model = torch.load(MODEL_PATH)
-    #trainer.validate( model) 
-    #trainer.test(model)
-    
-    del model
     #################################################################################
     if args.dataset == 'vkitti':
         sequence_1d_model = vkitti_model.SequenceVkitiModel(model_path=MODEL_PATH,
@@ -173,4 +157,39 @@ if __name__ == '__main__':
 
     del sequence_2d_model
 
+
+    #################################################################################
+    if args.dataset == 'vkitti':
+        dirichlet_model = vkitti_model.SequenceVkitiModel(model_path=MODEL_PATH,
+                                                     dataset_path=TRAIN_DATASET_PATH,
+                                                     encoder_name=ENCODER_NAME,
+                                                     convolution_type='DIRICHLET')                                       
+    elif args.dataset == 'robocup':
+        dirichlet_model = robocup_model.SequenceRobocupModel(model_path=MODEL_PATH,
+                                                     train_dataset_path=TRAIN_DATASET_PATH,
+                                                     valid_dataset_path=VAL_DATASET_PATH,
+                                                     encoder_name=ENCODER_NAME,
+                                                     convolution_type='DIRICHLET',
+                                                     out_classes=OUT_CLASSES)                                       
+         
+    else:
+        raise Exception("Wrong --dataset argument")
+           
+    logger = TensorBoardLogger("lightning_logs", name=args.dataset, version=SLURM_JOB_ID, sub_dir="DIRICHLET")
+    trainer = pl.Trainer(
+        accelerator='gpu', 
+        #devices=1,
+        max_epochs=20,
+        callbacks=[LearningRateMonitor(logging_interval="step"), 
+                   TQDMProgressBar(refresh_rate=1000)],
+        check_val_every_n_epoch=5,
+        logger=logger,
+        enable_checkpointing=False,
+        #overfit_batches=2000
+    )
+
+    trainer.fit( dirichlet_model) 
+    trainer.validate(dirichlet_model) 
+    trainer.test(dirichlet_model)
+    del dirichlet_model
 

@@ -437,10 +437,6 @@ class SequenceVkitiModel(pl.LightningModule):
         self.dataset_path = dataset_path
         self.model_path = model_path
         self.model = torch.load(model_path)
-        #Freezing the network
-        self.model.eval()
-        for param in self.model.parameters():
-            param.requires_grad = False
         self.convolution_type = convolution_type
         # preprocessing parameteres for image
         params = smp.encoders.get_preprocessing_params(encoder_name)
@@ -488,20 +484,27 @@ class SequenceVkitiModel(pl.LightningModule):
                                            device=self.device),
                              torch.nn.Upsample(size=(256,256), mode = 'nearest') #Make the image size auto
                             )
+        elif convolution_type == 'DIRICHLET':
+            self.DS_combine = uncertain_fusion.DempsterSchaferCombine(self.n_classes)
+            pass
+        elif convolution_type == 'MEAN':
+            self.mean_combine = uncertain_fusion.MeanUncertainty(self.n_classes)
+            pass
         else:
             raise 
 
 
-        for m in self.modules():
-            if isinstance(m, torch.nn.Conv2d):
-                if m is self.conv_1d:
-                    torch.nn.init.normal_(m.weight, mean=0.0, std=0.01)
+        #for m in self.modules():
+        #    if isinstance(m, torch.nn.Conv2d):
+        #        if m is self.conv_1d:
+        #            torch.nn.init.normal_(m.weight, mean=0.0, std=0.01)
     
     def forward(self, batch):
         #Freezing the network
-        self.model.eval()
-        for param in self.model.parameters():
-            param.requires_grad = False
+        if '1D' == self.convolution_type or '2D' == self.convolution_type:
+            self.model.eval()
+            for param in self.model.parameters():
+                param.requires_grad = False
 
         
         # normalize image here
@@ -515,13 +518,24 @@ class SequenceVkitiModel(pl.LightningModule):
         
         normalized_image = (batch["image1"] - self.mean) / self.std 
         logits_mask1 = self.model(normalized_image)
-      
-        fused_mask = torch.concat((propagate_mask0,logits_mask1), dim=1)
-        fused_mask = self.conv_1d(fused_mask)
 
-        logits_mask0 = F.relu(logits_mask0) + 1
-        logits_mask1 = F.relu(logits_mask1) + 1
-        #fused_mask = F.relu(fused_mask) + 1
+        if 'DIRICHLET'== self.convolution_type:
+            logits_mask1 = F.relu(logits_mask1) + 1
+            propagate_mask0 = F.relu(propagate_mask0) + 1
+            fused_mask = self.DS_combine(propagate_mask0, logits_mask1)
+        elif 'MEAN' == self.convolution_type:
+            logits_mask1 = F.relu(logits_mask1) + 1
+            propagate_mask0 = F.relu(propagate_mask0) + 1
+            fused_mask = self.mean_combine(propagate_mask0, logits_mask1)
+        elif '1D' == self.convolution_type or '2D' == self.convolution_type:
+            fused_mask = torch.concat((propagate_mask0,logits_mask1), dim=1)
+            fused_mask = self.conv_1d(fused_mask)
+            #for convolution first fuse then add 
+            logits_mask1 = F.relu(logits_mask1) + 1
+            logits_mask0 = F.relu(logits_mask0) + 1
+            propagate_mask0 = F.relu(propagate_mask0) + 1
+            fused_mask = F.relu(fused_mask) + 1
+
         
         return logits_mask0, propagate_mask0, logits_mask1, fused_mask
     
@@ -547,14 +561,26 @@ class SequenceVkitiModel(pl.LightningModule):
         
         logits_mask0, propagate_mask0, logits_mask1, fused_mask = self.forward(batch)
         
-        fused_mask = fused_mask.permute(0,2,3,1)
-        # [batch_size, height*width, n_classes] -> [batch_size*height*width, n_classes]
-        fused_mask = fused_mask.reshape(-1, self.n_classes)
         mask = torch.ravel(batch["mask1"])
         # [batch_size*height*width] -> [batch_size*height*width, n_classes] 
         mask = F.one_hot(mask.to(torch.long), self.n_classes)
-        #loss = self.loss_fn(fused_mask, mask, self.current_epoch, self.n_classes, 5)
-        loss = F.cross_entropy(fused_mask, mask.argmax(dim=1).to(torch.long))
+        if self.convolution_type == 'DIRICHLET' or self.convolution_type == 'MEAN':
+            loss = 0
+            for t in [propagate_mask0, logits_mask1, fused_mask]:
+                t = t.permute(0,2,3,1)
+                # [batch_size, height*width, n_classes] -> [batch_size*height*width, n_classes]
+                t = t.reshape(-1, self.n_classes)
+                loss += self.loss_fn(t, mask, self.current_epoch, self.n_classes, 5)
+            loss = loss/3.0
+            fused_mask = fused_mask.permute(0,2,3,1)
+            # [batch_size, height*width, n_classes] -> [batch_size*height*width, n_classes]
+            fused_mask = fused_mask.reshape(-1, self.n_classes)
+        else :
+            fused_mask = fused_mask.permute(0,2,3,1)
+            # [batch_size, height*width, n_classes] -> [batch_size*height*width, n_classes]
+            fused_mask = fused_mask.reshape(-1, self.n_classes)
+            loss = F.cross_entropy(fused_mask, mask.argmax(dim=1).to(torch.long))
+
         self.log(f"{stage}/evidential_loss", loss, prog_bar=True)
         
         fused_mask = F.relu(fused_mask) + 1
@@ -658,30 +684,33 @@ class SequenceVkitiModel(pl.LightningModule):
         return
 
     def configure_optimizers(self):
-        #optimizer=torch.optim.AdamW(filter(lambda p: p.requires_grad, self.parameters()), lr=0.0001, weight_decay=1e-5)
-        optimizer=torch.optim.AdamW( self.conv_1d.parameters(), lr=1e-3, weight_decay=1e-5)
-        #scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
-        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-5, last_epoch=-1)
+        if '1D' == self.convolution_type or '2D' == self.convolution_type:
+            optimizer=torch.optim.AdamW( self.conv_1d.parameters(), lr=1e-3, weight_decay=1e-5)
+            scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-5, last_epoch=-1)
+        else:
+            optimizer=torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=1e-6, amsgrad=True)
+            scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-7, last_epoch=-1)
+            #scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
     
         return {'optimizer': optimizer,'lr_scheduler':scheduler}
 
     def train_dataloader(self):
         dataset = SequentialImageVirtualKittiDataset(self.dataset_path, "train", transforms=self.kornia_pre_transform)
-        loader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=10)
+        loader = DataLoader(dataset, batch_size=4, shuffle=False, num_workers=10)
         self.label_names = dataset.label_names
         print ('training dataset length : ', len(dataset))
         return loader
 
     def val_dataloader(self):
         dataset = SequentialImageVirtualKittiDataset(self.dataset_path, "valid", transforms=self.kornia_pre_transform)
-        loader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=10)
+        loader = DataLoader(dataset, batch_size=4, shuffle=False, num_workers=10)
         self.label_names = dataset.label_names
         print ('Vaidation dataset length : ', len(dataset))
         return loader
 
     def test_dataloader(self):
         dataset = SequentialImageVirtualKittiDataset(self.dataset_path, "valid", transforms=self.kornia_pre_transform)
-        loader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=10)
+        loader = DataLoader(dataset, batch_size=4, shuffle=False, num_workers=10)
         self.label_names = dataset.label_names
         print ('Test dataset length : ', len(dataset))
         return loader
